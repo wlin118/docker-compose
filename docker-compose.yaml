@@ -1,0 +1,79 @@
+networks:
+  monitoring:
+    driver: bridge
+
+services:
+  grafana2:
+    image: grafana/grafana-enterprise
+    container_name: grafana2
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin # set Grafana admin password
+    ports:
+      - "33000:3000"
+    networks:
+      - monitoring
+    depends_on:
+      - loki2
+      - prometheus2
+
+  prometheus2:
+    image: prom/prometheus
+    container_name: prometheus2
+    volumes:
+      - prometheus-config:/etc/prometheus
+    ports:
+      - "39090:9090"
+    networks:
+      - monitoring
+    depends_on:
+      - cadvisor2
+
+  cadvisor2:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor2
+    ports:
+      - "38081:8080"
+    networks:
+      - monitoring
+
+  loki2:
+    image: grafana/loki:latest
+    container_name: loki2
+    # volumes:
+    #   - ./loki-config.yaml:/mnt/config/loki-config.yaml # Mounts the Loki configuration file.
+    #   - ./data:/tmp
+    ports:
+      - "33100:3100"
+    networks:
+      - monitoring
+    # command: -config.file=/mnt/config/loki-config.yaml # Runs Loki with the specified configuration file.
+
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: promtail
+    volumes:
+      - ./promtail-config.yaml:/mnt/config/promtail-config.yaml # Mounts the Promtail configuration file.
+      - ./logs:/logs # Mount the log directory
+    networks:
+      - monitoring
+    depends_on:
+      - loki2
+    command: -config.file=/mnt/config/promtail-config.yaml # Runs Promtail with the specified configuration file.
+
+  logger:
+    image: busybox
+    container_name: logger
+    command: /bin/sh -c "while true; do echo '{\"message\":\"hello world\"}'; sleep 1; done"
+    volumes:
+      - ./logs:/logs
+    networks:
+      - monitoring
+    depends_on:
+      - promtail
+
+volumes:
+  prometheus-config:
+    driver: local
+    external: false
+    name: prometheus-config-volume
