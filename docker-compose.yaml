@@ -1,55 +1,64 @@
+#All services below will connect to this shared network, allowing for container name communication
 networks:
   monitoring:
     driver: bridge
 
 services:
-  grafana2:
+  #Grafana enterprise image. When traffic is accessed at http://localhost:33000 
+  #in your browser, it forwards that traffic to port 3000 inside the Grafana container
+  grafana:
     image: grafana/grafana-enterprise
-    container_name: grafana2
+    container_name: grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin # set Grafana admin password
     ports:
-      - "33000:3000"
+      #host port(local device):container port(grafana container)
+      - "3000:3000"
     networks:
       - monitoring
     depends_on:
-      - loki2
-      - prometheus2
+    #waits for before launching
+      - loki
+      - prometheus
 
-  prometheus2:
+  prometheus:
+  #prometheus monitoring server
     image: prom/prometheus
-    container_name: prometheus2
+    container_name: prometheus
     volumes:
-      - prometheus-config:/etc/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
-      - "39090:9090"
+      - "9090:9090"
     networks:
       - monitoring
     depends_on:
-      - cadvisor2
+      - cadvisor
 
-  cadvisor2:
+  cadvisor:
+  #cadvisor container health monitoring tool
     image: gcr.io/cadvisor/cadvisor:latest
-    container_name: cadvisor2
+    container_name: cadvisor
     ports:
-      - "38081:8080"
+      - "8080:8080"
     networks:
       - monitoring
 
-  loki2:
+  loki:
+  #log aggregation system
     image: grafana/loki:latest
-    container_name: loki2
+    container_name: loki
     # volumes:
     #   - ./loki-config.yaml:/mnt/config/loki-config.yaml # Mounts the Loki configuration file.
     #   - ./data:/tmp
     ports:
-      - "33100:3100"
+      - "3100:3100"
     networks:
       - monitoring
     # command: -config.file=/mnt/config/loki-config.yaml # Runs Loki with the specified configuration file.
 
 
   promtail:
+  #log shipping agent
     image: grafana/promtail:3.0.0
     container_name: promtail
     volumes:
@@ -58,10 +67,11 @@ services:
     networks:
       - monitoring
     depends_on:
-      - loki2
+      - loki
     command: -config.file=/mnt/config/promtail-config.yaml # Runs Promtail with the specified configuration file.
 
   logger:
+  #test log generator
     image: busybox
     container_name: logger
     command: /bin/sh -c "while true; do echo '{\"message\":\"hello world\"}'; sleep 1; done"
@@ -72,6 +82,24 @@ services:
     depends_on:
       - promtail
 
+  node-exporter:
+  #node exporter for host system metrics
+    image: prom/node-exporter
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    networks:
+      - monitoring
+    pid: "host"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      
 volumes:
   prometheus-config:
     driver: local
